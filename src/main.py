@@ -6,7 +6,7 @@ import os
 import tkinter as tk
 import tkinter.ttk as ttk
 import tkinter.filedialog as filedialog
-import tkinter.colorchooser as colorchooser
+from tkcolorpicker import askcolor
 
 import PIL as pil
 import json
@@ -226,6 +226,31 @@ class Window(tk.Tk):
     def saveSettings(this):
         file = open(this.settingsFile, 'w+')
         json.dump(this.settings, file, indent=2)
+
+    class animation():
+        def __init__(this, canvas, images : list, settings : dict = FileNotFoundError) -> None:
+            this.canvas = canvas
+
+            this._images = images
+            if settings == None:
+                this.settings = {
+                    'x_spacing': 2,
+                    'y_spacing': 2,
+                    'width': 100,
+                    'auto_width': False,
+                }
+            else:
+                this.settings = settings
+
+        def initFrames(this):
+            pass
+
+        def update(this):
+            pass
+
+        class Frame():
+            def __init__(self, image, background = 'transparent') -> None:
+                pass
 
 
 def main():
