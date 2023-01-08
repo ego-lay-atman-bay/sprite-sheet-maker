@@ -1,5 +1,7 @@
 import logging as logging
 from datetime import datetime
+import numpy
+import math
 
 import os
 
@@ -8,8 +10,15 @@ import tkinter.ttk as ttk
 import tkinter.filedialog as filedialog
 from tkcolorpicker import askcolor
 
-import PIL as pil
+# import PIL as pil
+from PIL import Image, ImageTk, ImageColor, ImageDraw
 import json
+
+def color(color):
+    if color == 'transparent':
+        return (0, 0, 0, 255)
+    else:
+        return ImageColor.getcolor(color, 'RGBA')
 
 def createLogger(type = 'console'):
     format = '%(asctime)s %(levelname)s:%(message)s'
@@ -62,6 +71,12 @@ class Window(tk.Tk):
         this.createCanvas()
         this.createOptionsBar()
         this.createOptionsTab()
+        
+        images = []
+        for image in os.listdir('images'):
+            images.append(Image.open(f'images/{image}'))
+        
+        this.sheet = this.Animation(this.canvas, images, settings=this.settings)
     
     def createMenuBar(this):
         this.menuBar = tk.Menu(this)
@@ -77,7 +92,7 @@ class Window(tk.Tk):
         this.menuBar.add_cascade(label= 'File', menu=this.fileMenu)
 
     def createCanvas(this):
-        this.canvas = tk.Canvas(this.mainframe, background='white')
+        this.canvas = tk.Canvas(this.mainframe, background='grey')
         this.canvas.pack(fill='both', expand=True)
 
         this.canvasScrollbars = {
@@ -200,6 +215,8 @@ class Window(tk.Tk):
         logging.info(this.settings)
 
         this.saveSettings()
+        
+        this.sheet.update()
 
     # settings
     def loadSettings(this, **kwargs):
@@ -221,36 +238,155 @@ class Window(tk.Tk):
             'y_spacing': 2,
             'width': 100,
             'auto_width': False,
+            'background': 'black',
+            'frame_background': 'transparent',
         }
 
     def saveSettings(this):
         file = open(this.settingsFile, 'w+')
         json.dump(this.settings, file, indent=2)
 
-    class animation():
-        def __init__(this, canvas, images : list, settings : dict = FileNotFoundError) -> None:
+    class Animation():
+        def __init__(this, canvas : tk.Canvas, images : list[Image.Image], settings : dict = None, mode : str = 'image') -> None:
             this.canvas = canvas
 
             this._images = images
+            this.frames = []
             if settings == None:
-                this.settings = {
+                this.config = {
                     'x_spacing': 2,
                     'y_spacing': 2,
                     'width': 100,
                     'auto_width': False,
+                    'background': 'black',
+                    'frame_background': 'transparent',
                 }
             else:
-                this.settings = settings
+                this.config = settings
+            
+
+            logging.info(this.config)
+            
+            
+            this.initFrames()
+            
+            this.update()
 
         def initFrames(this):
-            pass
+            for image in this._images:
+                this.frames.append(this.Frame(image, this.config['frame_background']))
+            
+        def createSheet(this):
+            this.positions = []
+            position = (0, this.config['y_spacing'])
+            x, y = this.config['x_spacing'], this.config['y_spacing']
+            row, column = 0, 0
+            maxHeight = 0
+            maxWidth = 0
+            
+            for frame in this.frames:
+                data = {
+                    'frame': frame,
+                    'position': (x, y),
+                    'size': frame.size
+                }
+                
+                if column == 0:
+                    if this.config['width'] < data['size'][0] + (this.config['x_spacing'] * 2):
+                        this.config['width'] = data['size'][0] + (this.config['x_spacing'] * 2)
+                
+                if x > maxWidth:
+                    maxWidth = x
+                    
+                x += data['size'][0] + this.config['x_spacing']
+                
+                column += 1
+                if x > this.config['width']:
+                    x = this.config['x_spacing']
+                    y += maxHeight + this.config['y_spacing']
+                    maxHeight = 0
+                    column = 0
+                    row += 1
+                    
+                if column == 0:
+                    data['position'] = (x, y)
+                    x += data['size'][0] + this.config['x_spacing']
+                    
+                if data['size'][1] > maxHeight:
+                    maxHeight = data['size'][1]
+                        
+                this.positions.append(data)
+                logging.debug(data)
+                
+            
+            if x > maxWidth:
+                maxWidth = x
+                    
+            y += maxHeight + this.config['y_spacing']
+                
+            if this.config['auto_width']:
+                this.config['width'] = maxWidth  
+            
+            this.size = (this.config['width'], y)
+            this._background = Image.new('RGBA', this.size, color=this.background)
+            
+            # logging.debug(this.positions)
+            
+            this._checkerboard = Image.new('RGBA', this.size, color='white')
+            draw = ImageDraw.Draw(this._checkerboard)
+            square = 10
+            checkerboardWidth = math.ceil(this.size[0] / square)
+            checkerboardHeight = math.ceil(this.size[1] / square)
+            
+            
+            for r in range(0, checkerboardHeight):
+                for c in range(0, checkerboardWidth):
+                    if (c + (r % 2)) % 2 == 1:
+                        pos = (c * square, r * square)
+                        draw.rectangle((pos[0], pos[1], pos[0] + square, pos[1] + square), 'lightgrey')
+                        
+            this.image = this._background.copy()
+            
+            for data in this.positions:
+                mask = Image.new('RGBA', data['size'], 'black')
+                this.image.paste(mask, data['position'])
+                this.image.paste(data['frame'].image, data['position'])
+                
+            # this._checkerboard.show()
+            this.preview = this._checkerboard.copy()
+            this.preview.paste(this.image, mask=this.image.split()[3])
+
 
         def update(this):
-            pass
+            this.background = color(this.config['background'])
+            this.createSheet()
+            this._PhotoImage = ImageTk.PhotoImage(this.preview)
+            
+            this.canvasImage = this.canvas.create_image(1, 1, anchor='nw', image = this._PhotoImage)
 
         class Frame():
-            def __init__(self, image, background = 'transparent') -> None:
-                pass
+            def __init__(this, image : Image.Image, background = 'transparent') -> None:
+                this.anchor = None
+                this._image = image
+                this._image = this._image.convert('RGBA')
+                this.size = this._image.size
+                
+                this.config = {
+                    'background': background,
+                }
+                
+                this.update()
+                
+            def update(this):
+                mask = this._image.split()[3]
+                
+                this.backgroundColor = color(this.config['background'])
+                
+                this._backgroundImage = Image.new('RGBA', this._image.size, this.backgroundColor)
+                this.image = this._backgroundImage.copy()
+                this.image.paste(this._image, mask=mask)
+                
+                this.size = this.image.size
 
 
 def main():
