@@ -10,11 +10,13 @@ import tkinter.ttk as ttk
 import tkinter.filedialog as filedialog
 from tkcolorpicker import askcolor
 
+from colorpicker import ColorPicker
+
 # import PIL as pil
 from PIL import Image, ImageTk, ImageColor, ImageDraw
 import json
 
-def color(color):
+def getColor(color):
     if color == 'transparent':
         return (0, 0, 0, 255)
     else:
@@ -39,6 +41,7 @@ def createLogger(type = 'console'):
 
 createLogger()
 # createLogger('file')
+        
 
 class Window(tk.Tk):
     def __init__(this, *args, **kwargs):
@@ -130,7 +133,40 @@ class Window(tk.Tk):
     def createOptionsTab(this):
         # entry = ttk.Entry(this.optionsframe, validate='all', validatecommand=lambda args: print(args))
         # entry.pack()
-        pass
+        this.optionsTabWidgets = {}
+        
+        this.optionsTabWidgets['color-inputs'] = {
+            'frame': ttk.Frame(this.optionsframe),
+            'background': {},
+            'frame_background': {},
+        }
+        
+        this.optionsTabWidgets['color-inputs']['background']['frame'] = ttk.Frame(this.optionsTabWidgets['color-inputs']['frame'])
+        this.optionsTabWidgets['color-inputs']['frame_background']['frame'] = ttk.Frame(this.optionsTabWidgets['color-inputs']['frame'])
+        
+        this.optionsTabWidgets['color-inputs']['background']['var'] = tk.StringVar()
+        this.optionsTabWidgets['color-inputs']['background']['label'] = ttk.Label(this.optionsTabWidgets['color-inputs']['background']['frame'], text='Sheet Bg Color:')
+        this.optionsTabWidgets['color-inputs']['background']['button'] = ColorPicker(this.optionsTabWidgets['color-inputs']['background']['frame'], texvariable=this.optionsTabWidgets['color-inputs']['background']['var'], alpha=True, command=this.updateSettings, color=this.settings['background'])
+        # this.optionsTabWidgets['color-inputs']['background']['checkbox'] = ttk.Checkbutton(this.optionsTabWidgets['color-inputs']['frame'], text='Transparent')
+        
+        # this.optionsTabWidgets['color-inputs']['background']['checkbox'].pack(side='right')
+        this.optionsTabWidgets['color-inputs']['background']['button'].pack(side='right')
+        this.optionsTabWidgets['color-inputs']['background']['label'].pack(side='right')
+        
+        this.optionsTabWidgets['color-inputs']['frame_background']['var'] = tk.StringVar()
+        this.optionsTabWidgets['color-inputs']['frame_background']['label'] = ttk.Label(this.optionsTabWidgets['color-inputs']['frame_background']['frame'], text='Frame Bg Color:')
+        this.optionsTabWidgets['color-inputs']['frame_background']['button'] = ColorPicker(this.optionsTabWidgets['color-inputs']['frame_background']['frame'], texvariable=this.optionsTabWidgets['color-inputs']['frame_background']['var'], alpha=True, command=this.updateSettings, color=this.settings['frame_background'])
+        # this.optionsTabWidgets['color-inputs']['frame_background']['checkbox'] = ttk.Checkbutton(this.optionsTabWidgets['color-inputs']['frame'], text='Transparent')
+        
+        # this.optionsTabWidgets['color-inputs']['frame_background']['checkbox'].pack(side='right')
+        this.optionsTabWidgets['color-inputs']['frame_background']['button'].pack(side='right')
+        this.optionsTabWidgets['color-inputs']['frame_background']['label'].pack(side='right')
+        
+        this.optionsTabWidgets['color-inputs']['background']['frame'].pack(side='bottom')
+        this.optionsTabWidgets['color-inputs']['frame_background']['frame'].pack(side='bottom')
+        
+        this.optionsTabWidgets['color-inputs']['frame'].pack(anchor='s', fill='x', expand=True)
+        
 
     def checkNumber(this, value = None, action = None, include = [], exclude = [], callback = None):
             """
@@ -211,6 +247,11 @@ class Window(tk.Tk):
         this.settings['y_spacing'] = this.optionsWidgets['y_spacing']['var'].get()
         this.settings['width'] =this.optionsWidgets['width']['var'].get()
         this.settings['auto_width'] = this.optionsWidgets['auto_width']['var'].get()
+        
+        this.settings['background'] = this.optionsTabWidgets['color-inputs']['background']['var'].get()
+        this.settings['frame_background'] = this.optionsTabWidgets['color-inputs']['frame_background']['var'].get()
+        
+        
 
         logging.info(this.settings)
 
@@ -251,7 +292,7 @@ class Window(tk.Tk):
             this.canvas = canvas
 
             this._images = images
-            this.frames = []
+            this._frames = []
             if settings == None:
                 this.config = {
                     'x_spacing': 2,
@@ -274,21 +315,25 @@ class Window(tk.Tk):
 
         def initFrames(this):
             for image in this._images:
-                this.frames.append(this.Frame(image, this.config['frame_background']))
+                this._frames.append(this.Frame(image, this.config['frame_background']))
             
-        def createSheet(this):
-            this.positions = []
-            position = (0, this.config['y_spacing'])
+        def getFrameData(this):
+            this.frames = []
             x, y = this.config['x_spacing'], this.config['y_spacing']
             row, column = 0, 0
             maxHeight = 0
             maxWidth = 0
             
-            for frame in this.frames:
+            index = 0
+            
+            for frame in this._frames:
+                frame.config['background'] = this.config['frame_background']
+                frame.update()
                 data = {
                     'frame': frame,
                     'position': (x, y),
-                    'size': frame.size
+                    'size': frame.size,
+                    'index': index,
                 }
                 
                 if column == 0:
@@ -315,8 +360,10 @@ class Window(tk.Tk):
                 if data['size'][1] > maxHeight:
                     maxHeight = data['size'][1]
                         
-                this.positions.append(data)
-                logging.debug(data)
+                this.frames.append(data)
+                # logging.debug(data)
+                
+                index += 1
                 
             
             if x > maxWidth:
@@ -328,6 +375,9 @@ class Window(tk.Tk):
                 this.config['width'] = maxWidth  
             
             this.size = (this.config['width'], y)
+            
+        def createSheet(this):
+            this.getFrameData()
             this._background = Image.new('RGBA', this.size, color=this.background)
             
             # logging.debug(this.positions)
@@ -347,10 +397,11 @@ class Window(tk.Tk):
                         
             this.image = this._background.copy()
             
-            for data in this.positions:
+            for data in this.frames:
                 mask = Image.new('RGBA', data['size'], 'black')
                 this.image.paste(mask, data['position'])
                 this.image.paste(data['frame'].image, data['position'])
+                # data['frame'].image.split()[3].show()
                 
             # this._checkerboard.show()
             this.preview = this._checkerboard.copy()
@@ -358,7 +409,7 @@ class Window(tk.Tk):
 
 
         def update(this):
-            this.background = color(this.config['background'])
+            this.background = getColor(this.config['background'])
             this.createSheet()
             this._PhotoImage = ImageTk.PhotoImage(this.preview)
             
@@ -379,12 +430,15 @@ class Window(tk.Tk):
                 
             def update(this):
                 mask = this._image.split()[3]
+                # image = this._image.copy()
+                # image.paste(image, mask=mask)
                 
-                this.backgroundColor = color(this.config['background'])
+                this.backgroundColor = getColor(this.config['background'])
                 
                 this._backgroundImage = Image.new('RGBA', this._image.size, this.backgroundColor)
                 this.image = this._backgroundImage.copy()
-                this.image.paste(this._image, mask=mask)
+                this.image.alpha_composite(this._image)
+                # this.image.split()[3].show()
                 
                 this.size = this.image.size
 
