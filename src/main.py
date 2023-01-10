@@ -78,8 +78,42 @@ class Window(tk.Tk):
         images = []
         for image in os.listdir('images'):
             images.append(Image.open(f'images/{image}'))
+            
+        this.canvasMousePos = (0, 0)
         
         this.sheet = this.Animation(this.canvas, images, settings=this.settings)
+        this.sheetResizer = this.canvas.create_rectangle(this.sheet.size[0], 0, this.sheet.size[0] + 10, this.sheet.size[1], fill='lightblue', outline='lightblue')
+        this.updateSheetResizer()
+        
+    def startDraggingSheetResizer(this, e):
+        this.canvasMousePos = (this.canvas.canvasx(e.x),this.canvas.canvasy(e.y))
+        # pos = this.canvas.coords(this.sheetResizer)
+        
+    def stopDraggingSheetResizer(this, e):
+        this.updateSheetResizer()
+        
+        
+    def dragSheetResizer(this, e):
+        this.canvasMousePos = (this.canvas.canvasx(e.x),this.canvas.canvasy(e.y))
+        # logging.info(this.canvasMousePos)
+        
+        this.optionsWidgets['width']['var'].set(int(this.canvasMousePos[0]) - 5)
+        this.updateSettings()
+        this.updateSheetResizer()
+        
+        this.canvas.tag_unbind(this.sheetResizer, '<Leave>')
+        # this.canvas.config(cursor='sb_h_double_arrow')
+    
+    def updateSheetResizer(this):
+        this.canvas.coords(this.sheetResizer, this.sheet.size[0], 0, this.sheet.size[0] + 10, this.sheet.size[1])
+        
+        this.canvas.tag_bind(this.sheetResizer, '<Button-1>', this.startDraggingSheetResizer)
+        this.canvas.tag_bind(this.sheetResizer, '<ButtonRelease-1>', this.stopDraggingSheetResizer)
+        this.canvas.tag_bind(this.sheetResizer, '<Button1-Motion>', this.dragSheetResizer)
+        
+        this.canvas.tag_bind(this.sheetResizer, '<Enter>', lambda x: this.canvas.config(cursor="sb_h_double_arrow"))
+        this.canvas.tag_bind(this.sheetResizer, '<Leave>', lambda x: this.canvas.config(cursor=""))
+        
     
     def createMenuBar(this):
         this.menuBar = tk.Menu(this)
@@ -111,6 +145,7 @@ class Window(tk.Tk):
 
         this.canvas.bind('<MouseWheel>', lambda e: this.canvasScroll((0, e.delta/120)))
         this.canvas.bind('<Shift-MouseWheel>', lambda e: this.canvasScroll((e.delta/120, 0)))
+        
     
     def canvasScroll(this, amount: tuple):
         this.canvas.xview_scroll(int(-1*amount[0]), 'units')
@@ -162,8 +197,8 @@ class Window(tk.Tk):
         this.optionsTabWidgets['color-inputs']['frame_background']['button'].pack(side='right')
         this.optionsTabWidgets['color-inputs']['frame_background']['label'].pack(side='right')
         
-        this.optionsTabWidgets['color-inputs']['background']['frame'].pack(side='bottom')
-        this.optionsTabWidgets['color-inputs']['frame_background']['frame'].pack(side='bottom')
+        this.optionsTabWidgets['color-inputs']['background']['frame'].pack(side='bottom', fill='x', expand=True)
+        this.optionsTabWidgets['color-inputs']['frame_background']['frame'].pack(side='bottom', fill='x', expand=True)
         
         this.optionsTabWidgets['color-inputs']['frame'].pack(anchor='s', fill='x', expand=True)
         
@@ -245,7 +280,7 @@ class Window(tk.Tk):
     def updateSettings(this):
         this.settings['x_spacing'] = this.optionsWidgets['x_spacing']['var'].get()
         this.settings['y_spacing'] = this.optionsWidgets['y_spacing']['var'].get()
-        this.settings['width'] =this.optionsWidgets['width']['var'].get()
+        this.settings['width'] = this.optionsWidgets['width']['var'].get()
         this.settings['auto_width'] = this.optionsWidgets['auto_width']['var'].get()
         
         this.settings['background'] = this.optionsTabWidgets['color-inputs']['background']['var'].get()
@@ -308,6 +343,7 @@ class Window(tk.Tk):
 
             logging.info(this.config)
             
+            this._canvasImage = this.canvas.create_image(1, 1, anchor='nw')
             
             this.initFrames()
             
@@ -382,18 +418,7 @@ class Window(tk.Tk):
             
             # logging.debug(this.positions)
             
-            this._checkerboard = Image.new('RGBA', this.size, color='white')
-            draw = ImageDraw.Draw(this._checkerboard)
-            square = 10
-            checkerboardWidth = math.ceil(this.size[0] / square)
-            checkerboardHeight = math.ceil(this.size[1] / square)
-            
-            
-            for r in range(0, checkerboardHeight):
-                for c in range(0, checkerboardWidth):
-                    if (c + (r % 2)) % 2 == 1:
-                        pos = (c * square, r * square)
-                        draw.rectangle((pos[0], pos[1], pos[0] + square, pos[1] + square), 'lightgrey')
+            this.createCheckerboard()
                         
             this.image = this._background.copy()
             
@@ -406,14 +431,28 @@ class Window(tk.Tk):
             # this._checkerboard.show()
             this.preview = this._checkerboard.copy()
             this.preview.paste(this.image, mask=this.image.split()[3])
-
+            
 
         def update(this):
             this.background = getColor(this.config['background'])
             this.createSheet()
             this._PhotoImage = ImageTk.PhotoImage(this.preview)
+            this.canvas.itemconfig(this._canvasImage, image=this._PhotoImage)
+            # this.canvasImage = this.canvas.create_image(1, 1, anchor='nw', image = this._PhotoImage)
             
-            this.canvasImage = this.canvas.create_image(1, 1, anchor='nw', image = this._PhotoImage)
+        def createCheckerboard(this):
+            this._checkerboard = Image.new('RGBA', this.size, color='white')
+            draw = ImageDraw.Draw(this._checkerboard)
+            square = 10
+            checkerboardWidth = math.ceil(this.size[0] / square)
+            checkerboardHeight = math.ceil(this.size[1] / square)
+            
+            
+            for r in range(0, checkerboardHeight):
+                for c in range(0, checkerboardWidth):
+                    if (c + (r % 2)) % 2 == 1:
+                        pos = (c * square, r * square)
+                        draw.rectangle((pos[0], pos[1], pos[0] + square, pos[1] + square), 'lightgrey')
 
         class Frame():
             def __init__(this, image : Image.Image, background = 'transparent') -> None:
@@ -421,6 +460,8 @@ class Window(tk.Tk):
                 this._image = image
                 this._image = this._image.convert('RGBA')
                 this.size = this._image.size
+                
+                this.canvasImage = None
                 
                 this.config = {
                     'background': background,
@@ -441,6 +482,8 @@ class Window(tk.Tk):
                 # this.image.split()[3].show()
                 
                 this.size = this.image.size
+                
+                this.PhotoImage = ImageTk.PhotoImage(this.image)
 
 
 def main():
